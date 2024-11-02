@@ -2,18 +2,19 @@ import sys
 import psutil
 import math
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QPushButton
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt, QTimer, QPoint, QSettings
 from PyQt5.QtGui import QPainter, QPainterPath, QColor, QFont, QBrush
 
 class SystemStatsWidget(QMainWindow):
     def __init__(self):
         super().__init__()
         self.initUI()
+        self.load_settings()  # Load the saved position
 
     def initUI(self):
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setGeometry(100, 100, 300, 180)  # Reduced width and height
+        self.setGeometry(100, 100, 300, 180)  # Default width and height
 
         # Custom widget to draw CPU and memory usage with liquid animation
         self.widget = LiquidStatsGraph(self)
@@ -21,9 +22,9 @@ class SystemStatsWidget(QMainWindow):
 
         # Close button
         self.close_button = QPushButton("X", self)
-        self.close_button.setGeometry(270, 10, 20, 20)  # Adjusted position
+        self.close_button.setGeometry(160, 5, 20, 20)  # Adjusted position
         self.close_button.setStyleSheet(
-            "background-color: rgba(255, 0, 0, 150);"
+            "background-color: rgba(0, 0, 0, 33);"
             "color: white;"
             "border: none;"
             "font-size: 12px;"
@@ -50,6 +51,19 @@ class SystemStatsWidget(QMainWindow):
         if self.old_pos and event.buttons() == Qt.LeftButton:
             self.move(event.globalPos() - self.old_pos)
             event.accept()
+
+    def closeEvent(self, event):
+        self.save_settings()  # Save the position when the widget is closed
+        event.accept()
+
+    def save_settings(self):
+        settings = QSettings("kd_pc-emo", "pc_emo")
+        settings.setValue("position", self.pos())
+
+    def load_settings(self):
+        settings = QSettings("kd_pc-emo", "pc_emo")
+        pos = settings.value("position", QPoint(100, 100))
+        self.move(pos)
 
 class LiquidStatsGraph(QWidget):
     def __init__(self, parent=None):
