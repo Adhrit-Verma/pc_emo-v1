@@ -1,28 +1,27 @@
 import sys
 import psutil
-import math
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QPushButton
 from PyQt5.QtCore import Qt, QTimer, QPoint, QSettings
-from PyQt5.QtGui import QPainter, QPainterPath, QColor, QFont, QBrush
+from PyQt5.QtGui import QPainter, QColor, QFont, QPen
 
 class SystemStatsWidget(QMainWindow):
     def __init__(self):
         super().__init__()
         self.initUI()
-        self.load_settings()  # Load the saved position
+        self.load_settings()
 
     def initUI(self):
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setGeometry(100, 100, 400, 180)  # Increased width for the additional circle
+        self.setGeometry(100, 100, 200, 200)
 
-        # Custom widget to draw CPU, memory, and network speed with liquid animation
-        self.widget = LiquidStatsGraph(self)
+        # Custom widget to draw emoji face
+        self.widget = EmojiFace(self)
         self.setCentralWidget(self.widget)
 
         # Close button
         self.close_button = QPushButton("X", self)
-        self.close_button.setGeometry(370, 10, 20, 20)  # Adjusted position
+        self.close_button.setGeometry(170, 10, 20, 20)
         self.close_button.setStyleSheet(
             "background-color: rgba(255, 0, 0, 150);"
             "color: white;"
@@ -35,11 +34,10 @@ class SystemStatsWidget(QMainWindow):
         # Timer to update stats and animate
         self.timer = QTimer()
         self.timer.timeout.connect(self.widget.update_stats)
-        self.timer.start(50)  # Update every 50 ms
+        self.timer.start(1000)  # Update every 1000 ms
 
         # Variables for dragging
         self.old_pos = None
-
         self.show()
 
     def mousePressEvent(self, event):
@@ -53,7 +51,7 @@ class SystemStatsWidget(QMainWindow):
             event.accept()
 
     def closeEvent(self, event):
-        self.save_settings()  # Save the position when the widget is closed
+        self.save_settings()
         event.accept()
 
     def save_settings(self):
@@ -65,125 +63,88 @@ class SystemStatsWidget(QMainWindow):
         pos = settings.value("position", QPoint(100, 100))
         self.move(pos)
 
-class LiquidStatsGraph(QWidget):
+class EmojiFace(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.cpu_usage = 0
         self.memory_usage = 0
-        self.wave_offset = 0
-        self.upload_speed = 0
-        self.download_speed = 0
-        self.previous_net_io = psutil.net_io_counters()
+        self.expression = "happy"
+        self.emoji_renderer = EmojiRenderer()
 
     def update_stats(self):
-        # Get CPU and memory stats
+        # Update CPU and memory usage
         self.cpu_usage = psutil.cpu_percent()
         self.memory_usage = psutil.virtual_memory().percent
 
-        # Get network speeds
-        net_io = psutil.net_io_counters()
-        self.upload_speed = (net_io.bytes_sent - self.previous_net_io.bytes_sent) / 1024  # KB/s
-        self.download_speed = (net_io.bytes_recv - self.previous_net_io.bytes_recv) / 1024  # KB/s
-        self.previous_net_io = net_io  # Update previous counters
+        # Determine expression based on CPU and memory usage thresholds
+        if self.cpu_usage > 90 or self.memory_usage > 90:
+            self.expression = "struggling"
+        elif self.cpu_usage > 70 or self.memory_usage > 70:
+            self.expression = "worried"
+        elif self.cpu_usage > 50 or self.memory_usage > 50:
+            self.expression = "neutral"
+        else:
+            self.expression = "happy"
 
-        # Update wave offset for animation
-        self.wave_offset += 0.1
-        if self.wave_offset > 2 * math.pi:
-            self.wave_offset = 0
-
-        self.update()  # Trigger repaint
+        self.update()  # Trigger a paint event
+        self.repaint()  # Force repaint immediately
 
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
 
-        # Draw CPU circle with liquid animation
-        self.draw_liquid_circle(painter, 60, 80, self.cpu_usage, "C.P.U", QColor(0, 122, 255))
+        # Debug information
+        #painter.setFont(QFont("Arial", 10, QFont.Bold))
+        #painter.setPen(Qt.white)
+        #painter.drawText(10, 20, f"CPU Usage: {self.cpu_usage}%")
+        #painter.drawText(10, 40, f"Memory Usage: {self.memory_usage}%")
+        #painter.drawText(10, 60, f"Expression: {self.expression}")
 
-        # Draw Memory circle with liquid animation
-        self.draw_liquid_circle(painter, 150, 80, self.memory_usage, "Mem.", QColor(255, 153, 0))
+        # Render the emoji face based on the expression
+        self.emoji_renderer.render(painter, 50, 50, 100, 100, self.expression)
 
-        # Draw Network speed circle with gauges
-        self.draw_network_circle(painter, 240, 80, self.upload_speed, self.download_speed, "Net")
+class EmojiRenderer:
+    def render(self, painter, x, y, width, height, expression):
+        # Set face color based on expression
+        face_color = QColor(0, 255, 0)  # Default to green for "happy"
+        if expression == "neutral":
+            face_color = QColor(255, 255, 0)  # Yellow for neutral
+        elif expression == "worried":
+            face_color = QColor(255, 165, 0)  # Orange for worried
+        elif expression == "struggling":
+            face_color = QColor(255, 0, 0)  # Red for struggling
 
-    def draw_liquid_circle(self, painter, x, y, usage, label, color):
-        radius = 23  # Reduced radius for smaller circles
+        # Draw face circle
+        painter.setBrush(face_color)
         painter.setPen(Qt.NoPen)
+        painter.drawEllipse(x, y, width, height)
 
-        # Draw background circle
-        painter.setBrush(QColor(220, 220, 220))
-        painter.drawEllipse(x - radius, y - radius, radius * 2, radius * 2)
-
-        # Calculate liquid level based on usage (inverted)
-        level = usage / 100.0 * (radius * 2)
-
-        # Clip the circle to ensure liquid stays inside
-        clip_path = QPainterPath()
-        clip_path.addEllipse(x - radius, y - radius, radius * 2, radius * 2)
-        painter.setClipPath(clip_path)
-
-        # Create a path for the liquid animation
-        path = QPainterPath()
-        path.moveTo(x - radius, y + radius)
-
-        # Draw the liquid wave using a sinusoidal function
-        wave_amplitude = 5  # Height of the wave
-        wave_length = 30    # Length of the wave
-        for i in range(x - radius, x + radius):
-            wave_height = math.sin((i / wave_length) + self.wave_offset) * wave_amplitude
-            y_pos = y + radius - level + wave_height
-            path.lineTo(i, y_pos)
-
-        path.lineTo(x + radius, y + radius)
-        path.closeSubpath()
-
-        # Draw the liquid
-        painter.setBrush(QBrush(color))
-        painter.drawPath(path)
-
-        # Reset the clip to draw text
-        painter.setClipping(False)
-
-        # Center the percentage text inside the circle
-        painter.setFont(QFont("Arial", 10, QFont.Bold))
-        painter.setPen(Qt.black)
-        painter.drawText(x - 9, y + 5, f"{int(usage)}%")
-
-        # Draw the label text below the circle and in white
-        painter.setFont(QFont("Arial", 12))
-        painter.setPen(Qt.white)
-        painter.drawText(x - 20, y + 55, label)  # Label below the circle
-
-    def draw_network_circle(self, painter, x, y, upload_speed, download_speed, label):
-        radius = 23
-        painter.setPen(Qt.NoPen)
-
-        # We no longer draw a circle background for the network speed
-
-        # Adjust max_speed for better visibility
-        max_speed = 10  # Adjust this value to display small speeds better
-
-        # Calculate lengths for the upload and download bars
-        upload_bar_length = int(min(upload_speed / max_speed * (radius * 2), radius * 2))
-        download_bar_length = int(min(download_speed / max_speed * (radius * 2), radius * 2))
-
-        # Upload bar (above the circle)
-        painter.setBrush(QColor(0, 153, 255))  # Blue color for upload
-        painter.drawRect(x - radius, y - radius - 15, upload_bar_length, 5)
-
-        # Download bar (below the circle)
-        painter.setBrush(QColor(255, 102, 0))  # Orange color for download
-        painter.drawRect(x - radius, y + radius + 10, download_bar_length, 5)
-
-        # Display upload and download speed values above and below the bars
-        painter.setFont(QFont("Arial", 8, QFont.Bold))
-        painter.setPen(Qt.white)
-        painter.drawText(x - radius, y - radius - 20, f"↑ {upload_speed:.1f} KB/s")  # Upload speed
-        painter.drawText(x - radius, y + radius + 20, f"↓ {download_speed:.1f} KB/s")  # Download speed
-
-        # Draw the label text below the entire network section
-        painter.setFont(QFont("Arial", 12))
-        painter.drawText(x - 20, y + 55, label)  # Label below the circle
+        # Draw eyes and mouth based on expression
+        painter.setBrush(QColor(0, 0, 0))
+        if expression == "happy":
+            painter.drawEllipse(x + 25, y + 30, 10, 10)  # Left eye
+            painter.drawEllipse(x + 65, y + 30, 10, 10)  # Right eye
+            painter.setPen(QPen(Qt.black, 2))
+            painter.drawArc(x + 25, y + 50, 50, 20, 0, -180 * 16)  # Smile
+        elif expression == "neutral":
+            painter.drawRect(x + 25, y + 35, 10, 5)  # Left eye
+            painter.drawRect(x + 65, y + 35, 10, 5)  # Right eye
+            painter.drawLine(x + 30, y + 60, x + 70, y + 60)  # Straight mouth
+        elif expression == "worried":
+            painter.drawEllipse(x + 25, y + 30, 10, 10)  # Left eye
+            painter.drawEllipse(x + 65, y + 30, 10, 10)  # Right eye
+            painter.setPen(QPen(QColor(0, 0, 0), 2))
+            painter.drawArc(x + 20, y + 30, 20, 20, 200 * 16, 140 * 16)  # Left eyebrow
+            painter.drawArc(x + 60, y + 30, 20, 20, 200 * 16, 140 * 16)  # Right eyebrow
+            painter.drawArc(x + 25, y + 60, 50, 20, 180 * 16, -180 * 16)  # Frown
+        elif expression == "struggling":
+            painter.drawEllipse(x + 20, y + 30, 15, 15)  # Left eye
+            painter.drawEllipse(x + 65, y + 30, 15, 15)  # Right eye
+            painter.setBrush(QColor(255, 255, 255))
+            painter.drawEllipse(x + 25, y + 35, 5, 5)  # Rolling pupil left
+            painter.drawEllipse(x + 70, y + 35, 5, 5)  # Rolling pupil right
+            painter.setPen(QPen(Qt.black, 2))
+            painter.drawArc(x + 25, y + 65, 50, 20, 180 * 16, -180 * 16)  # Deeper frown
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
