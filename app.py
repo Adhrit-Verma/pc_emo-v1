@@ -68,21 +68,32 @@ class EmojiFace(QWidget):
         super().__init__(parent)
         self.cpu_usage = 0
         self.memory_usage = 0
+        self.upload_speed = 0
+        self.download_speed = 0
         self.expression = "happy"
         self.emoji_renderer = EmojiRenderer()
+        self.previous_net_io = psutil.net_io_counters()
 
     def update_stats(self):
         # Update CPU and memory usage
         self.cpu_usage = psutil.cpu_percent()
         self.memory_usage = psutil.virtual_memory().percent
 
+        # Update internet speeds
+        net_io = psutil.net_io_counters()
+        self.upload_speed = (net_io.bytes_sent - self.previous_net_io.bytes_sent) / 1024  # KB/s
+        self.download_speed = (net_io.bytes_recv - self.previous_net_io.bytes_recv) / 1024  # KB/s
+        self.previous_net_io = net_io
+
         # Determine expression based on CPU and memory usage thresholds
-        if self.cpu_usage > 90 or self.memory_usage > 90:
-            self.expression = "struggling"
-        elif self.cpu_usage > 70 or self.memory_usage > 70:
-            self.expression = "worried"
-        elif self.cpu_usage > 50 or self.memory_usage > 50:
-            self.expression = "neutral"
+        if self.cpu_usage > 90:
+            self.expression = "cpu_struggling"
+        elif self.cpu_usage > 70:
+            self.expression = "cpu_worried"
+        elif self.memory_usage > 90:
+            self.expression = "ram_exhausted"
+        elif self.memory_usage > 70:
+            self.expression = "ram_tired"
         else:
             self.expression = "happy"
 
@@ -93,26 +104,27 @@ class EmojiFace(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
 
-        # Debug information
-        #painter.setFont(QFont("Arial", 10, QFont.Bold))
-        #painter.setPen(Qt.white)
-        #painter.drawText(10, 20, f"CPU Usage: {self.cpu_usage}%")
-        #painter.drawText(10, 40, f"Memory Usage: {self.memory_usage}%")
-        #painter.drawText(10, 60, f"Expression: {self.expression}")
-
         # Render the emoji face based on the expression
         self.emoji_renderer.render(painter, 50, 50, 100, 100, self.expression)
+
+        # Display internet speeds
+        painter.setFont(QFont("Arial", 8, QFont.Bold))
+        painter.setPen(Qt.white)
+        painter.drawText(130, 180, f"↑ {self.upload_speed:.1f} KB/s")
+        painter.drawText(130, 190, f"↓ {self.download_speed:.1f} KB/s")
 
 class EmojiRenderer:
     def render(self, painter, x, y, width, height, expression):
         # Set face color based on expression
         face_color = QColor(0, 255, 0)  # Default to green for "happy"
-        if expression == "neutral":
-            face_color = QColor(255, 255, 0)  # Yellow for neutral
-        elif expression == "worried":
-            face_color = QColor(255, 165, 0)  # Orange for worried
-        elif expression == "struggling":
-            face_color = QColor(255, 0, 0)  # Red for struggling
+        if expression == "cpu_worried":
+            face_color = QColor(255, 165, 0)  # Orange
+        elif expression == "cpu_struggling":
+            face_color = QColor(255, 0, 0)  # Red
+        elif expression == "ram_tired":
+            face_color = QColor(255, 255, 0)  # Yellow
+        elif expression == "ram_exhausted":
+            face_color = QColor(255, 0, 0)  # Red
 
         # Draw face circle
         painter.setBrush(face_color)
@@ -126,18 +138,14 @@ class EmojiRenderer:
             painter.drawEllipse(x + 65, y + 30, 10, 10)  # Right eye
             painter.setPen(QPen(Qt.black, 2))
             painter.drawArc(x + 25, y + 50, 50, 20, 0, -180 * 16)  # Smile
-        elif expression == "neutral":
-            painter.drawRect(x + 25, y + 35, 10, 5)  # Left eye
-            painter.drawRect(x + 65, y + 35, 10, 5)  # Right eye
-            painter.drawLine(x + 30, y + 60, x + 70, y + 60)  # Straight mouth
-        elif expression == "worried":
+        elif expression == "cpu_worried" or expression == "ram_tired":
+            # Worried eyes with a focused, fatigued expression
             painter.drawEllipse(x + 25, y + 30, 10, 10)  # Left eye
             painter.drawEllipse(x + 65, y + 30, 10, 10)  # Right eye
             painter.setPen(QPen(QColor(0, 0, 0), 2))
-            painter.drawArc(x + 20, y + 30, 20, 20, 200 * 16, 140 * 16)  # Left eyebrow
-            painter.drawArc(x + 60, y + 30, 20, 20, 200 * 16, 140 * 16)  # Right eyebrow
             painter.drawArc(x + 25, y + 60, 50, 20, 180 * 16, -180 * 16)  # Frown
-        elif expression == "struggling":
+        elif expression == "cpu_struggling":
+            # Struggling eyes with an exhausted look
             painter.drawEllipse(x + 20, y + 30, 15, 15)  # Left eye
             painter.drawEllipse(x + 65, y + 30, 15, 15)  # Right eye
             painter.setBrush(QColor(255, 255, 255))
@@ -145,6 +153,12 @@ class EmojiRenderer:
             painter.drawEllipse(x + 70, y + 35, 5, 5)  # Rolling pupil right
             painter.setPen(QPen(Qt.black, 2))
             painter.drawArc(x + 25, y + 65, 50, 20, 180 * 16, -180 * 16)  # Deeper frown
+        elif expression == "ram_exhausted":
+            # Dizzy or tired face for memory overload
+            painter.drawEllipse(x + 25, y + 30, 10, 10)  # Left eye
+            painter.drawEllipse(x + 65, y + 30, 10, 10)  # Right eye
+            painter.setPen(QPen(Qt.black, 2))
+            painter.drawArc(x + 25, y + 60, 50, 20, 180 * 16, -180 * 16)  # Tired frown
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
