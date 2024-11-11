@@ -1,4 +1,4 @@
-# Project Name
+# PC EMO v1.5
 
 ![Demo GIF](assets/Recording2024-11-12011239-ezgif.com-effects.gif)
 
