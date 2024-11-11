@@ -121,7 +121,7 @@ class EmojiFace(QWidget):
 
     def breathe(self):
         # Breathing animation with smooth scaling effect
-        self.scale_factor = 1.0 + 0.02 * math.sin(self.breath_timer.interval() * 0.1 * time.time())
+        self.scale_factor = 1.0 + 0.02 * math.sin(time.time() * 4.0)  # Adjust frequency and amplitude
         self.update()
 
     def paintEvent(self, event):
