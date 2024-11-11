@@ -1,6 +1,6 @@
 # Project Name
 
-![Demo GIF](.venv\Include\Recording2024-11-12011239-ezgif.com-effects.gif)
+![Demo GIF](assets\Recording2024-11-12011239-ezgif.com-effects.gif)
 
 A Python application designed with a GUI using PyQt5, capable of monitoring and displaying system metrics such as CPU and memory usage.
 
