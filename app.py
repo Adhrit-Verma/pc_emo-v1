@@ -1,5 +1,7 @@
 import sys
 import psutil
+import math
+import time
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QPushButton
 from PyQt5.QtCore import Qt, QTimer, QPoint, QSettings
 from PyQt5.QtGui import QPainter, QColor, QFont, QPen
@@ -71,8 +73,20 @@ class EmojiFace(QWidget):
         self.upload_speed = 0
         self.download_speed = 0
         self.expression = "happy"
+        self.blinking = False
+        self.scale_factor = 1.0  # Scale for breathing animation
         self.emoji_renderer = EmojiRenderer()
         self.previous_net_io = psutil.net_io_counters()
+
+        # Timer for blinking
+        self.blink_timer = QTimer()
+        self.blink_timer.timeout.connect(self.blink)
+        self.blink_timer.start(5000)  # Blink every 5 seconds
+
+        # Timer for breathing animation
+        self.breath_timer = QTimer()
+        self.breath_timer.timeout.connect(self.breathe)
+        self.breath_timer.start(50)  # Smooth breathing effect at 50 ms intervals
 
     def update_stats(self):
         # Update CPU and memory usage
@@ -100,12 +114,22 @@ class EmojiFace(QWidget):
         self.update()  # Trigger a paint event
         self.repaint()  # Force repaint immediately
 
+    def blink(self):
+        self.blinking = True
+        QTimer.singleShot(200, lambda: setattr(self, 'blinking', False))  # Close eyes for 200 ms
+        self.update()
+
+    def breathe(self):
+        # Breathing animation with smooth scaling effect
+        self.scale_factor = 1.0 + 0.02 * math.sin(self.breath_timer.interval() * 0.1 * time.time())
+        self.update()
+
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
 
-        # Render the emoji face based on the expression
-        self.emoji_renderer.render(painter, 50, 50, 100, 100, self.expression)
+        # Render the emoji face with blinking and breathing effects
+        self.emoji_renderer.render(painter, 50, 50, 100, 100, self.expression, self.blinking, self.scale_factor)
 
         # Display internet speeds
         painter.setFont(QFont("Arial", 8, QFont.Bold))
@@ -114,7 +138,13 @@ class EmojiFace(QWidget):
         painter.drawText(130, 190, f"↓ {self.download_speed:.1f} KB/s")
 
 class EmojiRenderer:
-    def render(self, painter, x, y, width, height, expression):
+    def render(self, painter, x, y, width, height, expression, blinking, scale_factor):
+        # Adjust face size for breathing effect
+        scaled_width = int(width * scale_factor)
+        scaled_height = int(height * scale_factor)
+        face_x = x + (width - scaled_width) // 2
+        face_y = y + (height - scaled_height) // 2
+
         # Set face color based on expression
         face_color = QColor(0, 255, 0)  # Default to green for "happy"
         if expression == "cpu_worried":
@@ -129,36 +159,35 @@ class EmojiRenderer:
         # Draw face circle
         painter.setBrush(face_color)
         painter.setPen(Qt.NoPen)
-        painter.drawEllipse(x, y, width, height)
+        painter.drawEllipse(face_x, face_y, scaled_width, scaled_height)
 
-        # Draw eyes and mouth based on expression
-        painter.setBrush(QColor(0, 0, 0))
+        # Draw the mouth based on the expression (independent of blinking)
+        painter.setPen(QPen(Qt.black, 2))
         if expression == "happy":
-            painter.drawEllipse(x + 25, y + 30, 10, 10)  # Left eye
-            painter.drawEllipse(x + 65, y + 30, 10, 10)  # Right eye
-            painter.setPen(QPen(Qt.black, 2))
-            painter.drawArc(x + 25, y + 50, 50, 20, 0, -180 * 16)  # Smile
+            painter.drawArc(face_x + 25, face_y + 50, 50, 20, 0, -180 * 16)  # Smile
         elif expression == "cpu_worried" or expression == "ram_tired":
-            # Worried eyes with a focused, fatigued expression
-            painter.drawEllipse(x + 25, y + 30, 10, 10)  # Left eye
-            painter.drawEllipse(x + 65, y + 30, 10, 10)  # Right eye
-            painter.setPen(QPen(QColor(0, 0, 0), 2))
-            painter.drawArc(x + 25, y + 60, 50, 20, 180 * 16, -180 * 16)  # Frown
-        elif expression == "cpu_struggling":
-            # Struggling eyes with an exhausted look
-            painter.drawEllipse(x + 20, y + 30, 15, 15)  # Left eye
-            painter.drawEllipse(x + 65, y + 30, 15, 15)  # Right eye
-            painter.setBrush(QColor(255, 255, 255))
-            painter.drawEllipse(x + 25, y + 35, 5, 5)  # Rolling pupil left
-            painter.drawEllipse(x + 70, y + 35, 5, 5)  # Rolling pupil right
-            painter.setPen(QPen(Qt.black, 2))
-            painter.drawArc(x + 25, y + 65, 50, 20, 180 * 16, -180 * 16)  # Deeper frown
-        elif expression == "ram_exhausted":
-            # Dizzy or tired face for memory overload
-            painter.drawEllipse(x + 25, y + 30, 10, 10)  # Left eye
-            painter.drawEllipse(x + 65, y + 30, 10, 10)  # Right eye
-            painter.setPen(QPen(Qt.black, 2))
-            painter.drawArc(x + 25, y + 60, 50, 20, 180 * 16, -180 * 16)  # Tired frown
+            painter.drawArc(face_x + 25, face_y + 60, 50, 20, 180 * 16, -180 * 16)  # Frown
+        elif expression == "cpu_struggling" or expression == "ram_exhausted":
+            painter.drawArc(face_x + 25, face_y + 65, 50, 20, 180 * 16, -180 * 16)  # Deeper frown
+
+        # Draw eyes based on blinking state
+        painter.setBrush(QColor(0, 0, 0))
+        if blinking:
+            # Draw closed eyes as short horizontal lines for blinking
+            painter.drawLine(face_x + 25, face_y + 35, face_x + 35, face_y + 35)  # Left eye closed
+            painter.drawLine(face_x + 65, face_y + 35, face_x + 75, face_y + 35)  # Right eye closed
+        else:
+            # Draw normal eyes based on expression (not affected by blinking)
+            if expression == "cpu_struggling":
+                painter.drawEllipse(face_x + 20, face_y + 30, 15, 15)  # Left eye
+                painter.drawEllipse(face_x + 65, face_y + 30, 15, 15)  # Right eye
+                painter.setBrush(QColor(255, 255, 255))
+                painter.drawEllipse(face_x + 25, face_y + 35, 5, 5)  # Left pupil
+                painter.drawEllipse(face_x + 70, face_y + 35, 5, 5)  # Right pupil
+            else:
+                # Regular eyes for other expressions
+                painter.drawEllipse(face_x + 25, face_y + 30, 10, 10)  # Left eye
+                painter.drawEllipse(face_x + 65, face_y + 30, 10, 10)  # Right eye
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
