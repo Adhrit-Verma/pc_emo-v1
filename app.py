@@ -14,17 +14,17 @@ class SystemStatsWidget(QMainWindow):
     def initUI(self):
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setGeometry(100, 100, 300, 180)  # Default width and height
+        self.setGeometry(100, 100, 400, 180)  # Increased width for the additional circle
 
-        # Custom widget to draw CPU and memory usage with liquid animation
+        # Custom widget to draw CPU, memory, and network speed with liquid animation
         self.widget = LiquidStatsGraph(self)
         self.setCentralWidget(self.widget)
 
         # Close button
         self.close_button = QPushButton("X", self)
-        self.close_button.setGeometry(160, 5, 20, 20)  # Adjusted position
+        self.close_button.setGeometry(370, 10, 20, 20)  # Adjusted position
         self.close_button.setStyleSheet(
-            "background-color: rgba(0, 0, 0, 33);"
+            "background-color: rgba(255, 0, 0, 150);"
             "color: white;"
             "border: none;"
             "font-size: 12px;"
@@ -35,7 +35,7 @@ class SystemStatsWidget(QMainWindow):
         # Timer to update stats and animate
         self.timer = QTimer()
         self.timer.timeout.connect(self.widget.update_stats)
-        self.timer.start(50)  # Update every 50 ms for smooth animation
+        self.timer.start(50)  # Update every 50 ms
 
         # Variables for dragging
         self.old_pos = None
@@ -71,11 +71,20 @@ class LiquidStatsGraph(QWidget):
         self.cpu_usage = 0
         self.memory_usage = 0
         self.wave_offset = 0
+        self.upload_speed = 0
+        self.download_speed = 0
+        self.previous_net_io = psutil.net_io_counters()
 
     def update_stats(self):
-        # Get system stats using psutil
+        # Get CPU and memory stats
         self.cpu_usage = psutil.cpu_percent()
         self.memory_usage = psutil.virtual_memory().percent
+
+        # Get network speeds
+        net_io = psutil.net_io_counters()
+        self.upload_speed = (net_io.bytes_sent - self.previous_net_io.bytes_sent) / 1024  # KB/s
+        self.download_speed = (net_io.bytes_recv - self.previous_net_io.bytes_recv) / 1024  # KB/s
+        self.previous_net_io = net_io  # Update previous counters
 
         # Update wave offset for animation
         self.wave_offset += 0.1
@@ -92,7 +101,10 @@ class LiquidStatsGraph(QWidget):
         self.draw_liquid_circle(painter, 60, 80, self.cpu_usage, "C.P.U", QColor(0, 122, 255))
 
         # Draw Memory circle with liquid animation
-        self.draw_liquid_circle(painter, 120, 80, self.memory_usage, "Mem.", QColor(255, 153, 0))
+        self.draw_liquid_circle(painter, 150, 80, self.memory_usage, "Mem.", QColor(255, 153, 0))
+
+        # Draw Network speed circle with gauges
+        self.draw_network_circle(painter, 240, 80, self.upload_speed, self.download_speed, "Net")
 
     def draw_liquid_circle(self, painter, x, y, usage, label, color):
         radius = 23  # Reduced radius for smaller circles
@@ -140,6 +152,37 @@ class LiquidStatsGraph(QWidget):
         # Draw the label text below the circle and in white
         painter.setFont(QFont("Arial", 12))
         painter.setPen(Qt.white)
+        painter.drawText(x - 20, y + 55, label)  # Label below the circle
+
+    def draw_network_circle(self, painter, x, y, upload_speed, download_speed, label):
+        radius = 23
+        painter.setPen(Qt.NoPen)
+
+        # We no longer draw a circle background for the network speed
+
+        # Adjust max_speed for better visibility
+        max_speed = 10  # Adjust this value to display small speeds better
+
+        # Calculate lengths for the upload and download bars
+        upload_bar_length = int(min(upload_speed / max_speed * (radius * 2), radius * 2))
+        download_bar_length = int(min(download_speed / max_speed * (radius * 2), radius * 2))
+
+        # Upload bar (above the circle)
+        painter.setBrush(QColor(0, 153, 255))  # Blue color for upload
+        painter.drawRect(x - radius, y - radius - 15, upload_bar_length, 5)
+
+        # Download bar (below the circle)
+        painter.setBrush(QColor(255, 102, 0))  # Orange color for download
+        painter.drawRect(x - radius, y + radius + 10, download_bar_length, 5)
+
+        # Display upload and download speed values above and below the bars
+        painter.setFont(QFont("Arial", 8, QFont.Bold))
+        painter.setPen(Qt.white)
+        painter.drawText(x - radius, y - radius - 20, f"↑ {upload_speed:.1f} KB/s")  # Upload speed
+        painter.drawText(x - radius, y + radius + 20, f"↓ {download_speed:.1f} KB/s")  # Download speed
+
+        # Draw the label text below the entire network section
+        painter.setFont(QFont("Arial", 12))
         painter.drawText(x - 20, y + 55, label)  # Label below the circle
 
 if __name__ == "__main__":
